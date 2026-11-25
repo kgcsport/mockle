@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width">
+<style>
+*{box-sizing:border-box}html,body{width:1200px;height:630px;margin:0;overflow:hidden}body{display:grid;grid-template-columns:1.08fr .92fr;background:#fff;color:#121213;font-family:Arial,sans-serif}.copy{display:flex;flex-direction:column;justify-content:center;padding:70px 30px 70px 82px;border-top:16px solid #121213}.brand{font:700 42px/1 Georgia,serif;letter-spacing:-2px}.eyebrow{width:max-content;margin:54px 0 18px;border-radius:99px;background:#f5edc9;padding:10px 17px;font-size:17px;font-weight:800;letter-spacing:2px}.copy h1{max-width:620px;margin:0;font:700 78px/.96 Georgia,serif;letter-spacing:-4px}.copy p{margin:26px 0 0;color:#555;font-size:24px;line-height:1.35}.art{display:grid;place-items:center;background:#f5f5f2;padding:46px}.boards{display:grid;grid-template-columns:repeat(2,170px);gap:18px;transform:rotate(-2deg)}.board{display:grid;grid-template-columns:repeat(5,1fr);gap:5px;border-radius:9px;background:#fff;padding:13px;box-shadow:0 12px 25px #0002}.tile{aspect-ratio:1;border:3px solid #d3d6da}.tile:nth-child(2),.tile:nth-child(6),.tile:nth-child(13){border-color:#6aaa64;background:#6aaa64}.tile:nth-child(4),.tile:nth-child(9){border-color:#c9b458;background:#c9b458}.tile:nth-child(11){border-color:#787c7e;background:#787c7e}.connections{width:430px;display:grid;gap:15px;transform:rotate(-2deg)}.connection{height:94px;display:grid;place-items:center;border-radius:10px;color:#242424;font-size:20px;font-weight:900;letter-spacing:2px}.connection:nth-child(1){background:#f9df6d}.connection:nth-child(2){background:#a0c35a}.connection:nth-child(3){background:#b0c4ef}.connection:nth-child(4){background:#ba81c5}.generic{display:grid;grid-template-columns:repeat(4,78px);gap:12px;transform:rotate(-2deg)}.generic .tile{width:78px}.generic .tile:nth-child(3n){border-color:#6aaa64;background:#6aaa64}.generic .tile:nth-child(5n){border-color:#c9b458;background:#c9b458}
+</style>
+</head>
+<body>
+<section class="copy"><div class="brand">MOCKLE</div><div class="eyebrow">A CUSTOM PUZZLE</div><h1></h1><p>Made just for you. Can you solve it?</p></section>
+<section class="art"></section>
+<script>
+const type=new URLSearchParams(location.search).get('type')||'mockle';
+const names={mockle:'A game is waiting.',wordle:'Your Wordle is waiting.',dordle:'Two words. One challenge.',quordle:'Four words. Nine guesses.',octordle:'Eight words. Thirteen guesses.',connections:'Find four groups of four.'};
+document.querySelector('h1').textContent=names[type]||names.mockle;
+const art=document.querySelector('.art');
+if(type==='connections'){
+  art.innerHTML='<div class="connections"><div class="connection">FOUR WORDS</div><div class="connection">ONE CONNECTION</div><div class="connection">FOUR GROUPS</div><div class="connection">FOUR MISTAKES</div></div>';
+}else if(type==='mockle'){
+  art.innerHTML='<div class="generic">'+Array.from({length:20},()=>'<i class="tile"></i>').join('')+'</div>';
+}else{
+  const count={wordle:1,dordle:2,quordle:4,octordle:8}[type];
+  art.innerHTML='<div class="boards">'+Array.from({length:count},()=>'<div class="board">'+Array.from({length:15},()=>'<i class="tile"></i>').join('')+'</div>').join('')+'</div>';
+  if(count===1)document.querySelector('.boards').style.gridTemplateColumns='300px';
+  if(count===8){document.querySelector('.boards').style.gridTemplateColumns='repeat(4,105px)';document.querySelectorAll('.board').forEach(board=>board.style.padding='8px')}
+}
+</script>
+</body>
+</html>

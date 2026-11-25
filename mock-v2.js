@@ -1,6 +1,7 @@
 (() => {
   'use strict';
   const app = document.querySelector('#mock-app');
+  const rootPath = new URL('.', document.currentScript.src).pathname;
   const modes = { wordle: ['Wordle', 1, 6], dordle: ['Dordle', 2, 7], quordle: ['Quordle', 4, 9], octordle: ['Octordle', 8, 13] };
   const defaults = 'ADORE APPLE BEACH BERRY BRAVE BREAD BRICK CHARM CHEER CLOUD CORAL CRANE DANCE DREAM EARTH FLAME FROST GIANT GRACE GRAPE GREEN HONEY HOUSE JUICE LIGHT LUCKY MANGO MAPLE MUSIC NOBLE OCEAN OLIVE PAINT PEACH PIANO PLANT PRANK QUEST RAINY RIVER ROBOT SHINE SMILE SOLAR SPARK STONE STORM SWEET TIGER TOAST TRAIL WATER WHALE WORLD YOUTH ZEBRA'.split(' ');
   const defaultGroups = [['Things with keys', ['PIANO', 'LOCK', 'MAP', 'KEYBOARD']], ['Kinds of jam', ['TRAFFIC', 'PAPER', 'FRUIT', 'SESSION']], ['Words after “space”', ['BAR', 'CADET', 'HEATER', 'WALK']], ['___ light', ['DAY', 'FLASH', 'LIME', 'MOON']]];
@@ -11,8 +12,8 @@
   const header = (title = 'MOCKLE', back = false, subtitle = '') => `<header>${back ? '<button class="mock-icon home" aria-label="Back">☰</button>' : '<span></span>'}<div><h1>${esc(title)}</h1><p>${esc(subtitle || (back ? 'daily puzzle' : 'family game night'))}</p></div>${back ? '<button class="mock-icon help" aria-label="How to play">?</button>' : '<span></span>'}</header>`;
   const pack = data => { const bytes = new TextEncoder().encode(JSON.stringify(data)); let binary = ''; bytes.forEach(b => { binary += String.fromCharCode(b); }); return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); };
   const unpack = text => { const s = text.replace(/-/g, '+').replace(/_/g, '/'); const binary = atob(s + '='.repeat((4 - s.length % 4) % 4)); return JSON.parse(new TextDecoder().decode(Uint8Array.from(binary, c => c.charCodeAt(0)))); };
-  const linkFor = data => `${location.origin}${location.pathname}#play=${pack(data)}`;
-  const editLinkFor = data => `${location.origin}${location.pathname}#edit=${pack(data)}`;
+  const linkFor = data => `${location.origin}${rootPath}${data.m}/#play=${pack(data)}`;
+  const editLinkFor = data => `${location.origin}${rootPath}#edit=${pack(data)}`;
   const draftKey = mode => `mockle:draft:${mode}`;
   const readStored = (key, fallback = null) => { try { const value = localStorage.getItem(key); return value ? JSON.parse(value) : fallback; } catch (_) { return fallback; } };
   const writeStored = (key, value) => { try { localStorage.setItem(key, JSON.stringify(value)); } catch (_) {} };
@@ -59,7 +60,7 @@
     document.title = 'Mockle — Create a Game';
     app.innerHTML = header() + `<main class="mock-picker"><div class="mock-intro"><b>Game maker</b><h2>What should your friend play?</h2><p>Choose a format, set the hidden answers, and create a tagged player link.</p></div><div class="mock-choices">${Object.entries(modes).map(([key, m]) => `<button data-mode="${key}"><span class="mock-preview">${'<i></i>'.repeat(Math.min(m[1], 8))}</span><span><strong>${m[0]}</strong><small>${m[1]} answer${m[1] > 1 ? 's' : ''} · ${m[2]} guesses</small></span></button>`).join('')}<button data-mode="connections"><span class="mock-preview"><i></i><i></i><i></i><i></i></span><span><strong>Connections</strong><small>4 custom groups · 4 mistakes</small></span></button></div><p class="mock-note">✦ Custom answers are encoded into the player link and never shown on the game screen.</p></main>${footer()}`;
     app.querySelectorAll('[data-mode]').forEach(button => { button.onclick = () => setup(button.dataset.mode); });
-    if (changeUrl) history.replaceState({}, '', location.pathname);
+    if (changeUrl) history.replaceState({}, '', rootPath);
     scrollTo(0, 0);
   }
 
