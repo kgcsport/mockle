@@ -57,7 +57,7 @@
       "purpose": "any maskable"
     }
   ],
-  "start_url": "/octordle/",
+  "start_url": "/mockle/",
   "background_color": "#181a1b",
   "display": "standalone",
   "orientation": "portrait",
