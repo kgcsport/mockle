@@ -25,15 +25,41 @@
   function setup(mode) {
     const isConnections = mode === 'connections', title = isConnections ? 'Connections' : modes[mode][0], count = isConnections ? 4 : modes[mode][1];
     const fields = isConnections
-      ? Array.from({ length: 4 }, (_, i) => `<div class="group-fields"><label>Group ${i + 1} name<input class="group-name" maxlength="50" placeholder="e.g. Things with keys"></label><label>Four words, separated by commas<input class="group-words" maxlength="120" placeholder="PIANO, LOCK, MAP, KEYBOARD"></label></div>`).join('')
+      ? Array.from({ length: 4 }, (_, i) => `<div class="group-fields"><div class="group-order"><strong><span class="group-number">${i + 1}</span>. <span class="group-difficulty"></span></strong><span><button type="button" class="move-group move-up" aria-label="Move group ${i + 1} up">Move up</button><button type="button" class="move-group move-down" aria-label="Move group ${i + 1} down">Move down</button></span></div><label>Category name<input class="group-name" maxlength="50" placeholder="e.g. Things with keys"></label><label>Four words, separated by commas<input class="group-words" maxlength="120" placeholder="PIANO, LOCK, MAP, KEYBOARD"></label></div>`).join('')
       : Array.from({ length: count }, (_, i) => `<label class="answer-label">Answer ${i + 1}<input class="answer-input" maxlength="5" autocomplete="off" spellcheck="false" placeholder="APPLE"></label>`).join('');
-    app.innerHTML = header('CREATE A GAME', true, title) + `<main class="mock-setup"><div class="setup-heading"><span>Sender setup</span><h2>${esc(title)}</h2><p>${isConnections ? 'Name four categories and enter four connected words for each.' : `Enter ${count} hidden five-letter answer${count > 1 ? 's' : ''}.`}</p></div><label class="setup-label">Tag for your friend <span>optional</span><input class="tag-input" maxlength="40" placeholder="e.g. Jamie"></label><div class="answer-fields">${fields}</div><p class="setup-error" role="alert"></p><div class="setup-actions"><button class="preview-button">Preview game</button><button class="copy-button primary">Copy player link</button></div><label class="link-output" hidden>Tagged player link<input readonly></label><p class="privacy-note">The answers are concealed, not encrypted. Anyone who deliberately decodes the link can read them.</p></main>${footer()}`;
+    app.innerHTML = header('CREATE A GAME', true, title) + `<main class="mock-setup"><div class="setup-heading"><span>Sender setup</span><h2>${esc(title)}</h2><p>${isConnections ? 'Name four categories and enter four connected words for each. Then arrange them from easiest (yellow) to hardest (purple).' : `Enter ${count} hidden five-letter answer${count > 1 ? 's' : ''}.`}</p></div><label class="setup-label">Tag for your friend <span>optional</span><input class="tag-input" maxlength="40" placeholder="e.g. Jamie"></label><div class="answer-fields">${fields}</div><p class="setup-error" role="alert"></p><div class="setup-actions"><button class="preview-button">Preview game</button><button class="copy-button primary">Copy player link</button></div><label class="link-output" hidden>Tagged player link<input readonly></label><p class="privacy-note">The answers are concealed, not encrypted. Anyone who deliberately decodes the link can read them.</p></main>${footer()}`;
     app.querySelector('.home').onclick = picker;
     app.querySelector('.help').hidden = true;
     app.querySelectorAll('.answer-input').forEach(input => { input.oninput = () => { input.value = input.value.toUpperCase().replace(/[^A-Z]/g, ''); }; });
+    if (isConnections) {
+      app.querySelectorAll('.move-up').forEach(button => { button.onclick = () => moveGroup(button.closest('.group-fields'), -1); });
+      app.querySelectorAll('.move-down').forEach(button => { button.onclick = () => moveGroup(button.closest('.group-fields'), 1); });
+      updateGroupOrder();
+    }
     app.querySelector('.preview-button').onclick = () => create(mode, false);
     app.querySelector('.copy-button').onclick = () => create(mode, true);
     scrollTo(0, 0);
+  }
+
+  function moveGroup(row, direction) {
+    const sibling = direction < 0 ? row.previousElementSibling : row.nextElementSibling;
+    if (!sibling) return;
+    if (direction < 0) row.parentElement.insertBefore(row, sibling);
+    else row.parentElement.insertBefore(sibling, row);
+    updateGroupOrder();
+    row.querySelector(direction < 0 ? '.move-up' : '.move-down').focus();
+  }
+
+  function updateGroupOrder() {
+    const difficulty = ['Yellow · easiest', 'Green', 'Blue', 'Purple · hardest'];
+    [...app.querySelectorAll('.group-fields')].forEach((row, i, rows) => {
+      row.querySelector('.group-number').textContent = i + 1;
+      row.querySelector('.group-difficulty').textContent = difficulty[i];
+      row.querySelector('.move-up').disabled = i === 0;
+      row.querySelector('.move-down').disabled = i === rows.length - 1;
+      row.querySelector('.move-up').setAttribute('aria-label', `Move group ${i + 1} up`);
+      row.querySelector('.move-down').setAttribute('aria-label', `Move group ${i + 1} down`);
+    });
   }
 
   function payloadFrom(mode) {
@@ -101,7 +127,7 @@
   }
   function renderConnections() {
     const solved = app.querySelector('.solved'), grid = app.querySelector('.mock-cgrid'); solved.innerHTML = grid.innerHTML = '';
-    connectionGame.solved.forEach(group => solved.insertAdjacentHTML('beforeend', `<div class="mock-group"><div><strong>${esc(group[0])}</strong><span>${group[1].map(esc).join(', ')}</span></div></div>`));
+    connectionGame.solved.forEach(group => solved.insertAdjacentHTML('beforeend', `<div class="mock-group level-${connectionGame.groups.indexOf(group)}"><div><strong>${esc(group[0])}</strong><span>${group[1].map(esc).join(', ')}</span></div></div>`));
     connectionGame.remaining.forEach(word => { const button = document.createElement('button'); button.className = `mock-word${connectionGame.selected.includes(word) ? ' selected' : ''}`; button.textContent = word; button.onclick = () => { const i = connectionGame.selected.indexOf(word); if (i >= 0) connectionGame.selected.splice(i, 1); else if (connectionGame.selected.length < 4) connectionGame.selected.push(word); renderConnections(); }; grid.append(button); });
     app.querySelector('.mistakes').textContent = Array(connectionGame.mistakes).fill('●').join(' ') || '—'; app.querySelector('.send').disabled = connectionGame.selected.length !== 4 || connectionGame.over; app.querySelector('.deselect').disabled = !connectionGame.selected.length || connectionGame.over; app.querySelector('.shuffle').disabled = connectionGame.over;
   }
