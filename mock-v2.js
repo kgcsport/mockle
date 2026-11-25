@@ -12,6 +12,7 @@
   const pack = data => { const bytes = new TextEncoder().encode(JSON.stringify(data)); let binary = ''; bytes.forEach(b => { binary += String.fromCharCode(b); }); return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); };
   const unpack = text => { const s = text.replace(/-/g, '+').replace(/_/g, '/'); const binary = atob(s + '='.repeat((4 - s.length % 4) % 4)); return JSON.parse(new TextDecoder().decode(Uint8Array.from(binary, c => c.charCodeAt(0)))); };
   const linkFor = data => `${location.origin}${location.pathname}#play=${pack(data)}`;
+  const editLinkFor = data => `${location.origin}${location.pathname}#edit=${pack(data)}`;
   const draftKey = mode => `mockle:draft:${mode}`;
   const readStored = (key, fallback = null) => { try { const value = localStorage.getItem(key); return value ? JSON.parse(value) : fallback; } catch (_) { return fallback; } };
   const writeStored = (key, value) => { try { localStorage.setItem(key, JSON.stringify(value)); } catch (_) {} };
@@ -19,12 +20,28 @@
   const blankDraft = mode => mode === 'connections' ? { t: '', g: Array.from({ length: 4 }, () => ['', '']) } : { t: '', w: Array(modes[mode][1]).fill('') };
   const hasDraft = draft => Boolean(draft && (draft.t || draft.w?.some(Boolean) || draft.g?.some(group => group?.[0] || group?.[1]?.length)));
 
-  function saveDraft(mode) {
-    if (!app.querySelector('.mock-setup')) return;
-    const draft = { t: app.querySelector('.tag-input').value, updated: Date.now() };
+  function draftFromForm(mode) {
+    const draft = { v: 1, m: mode, t: app.querySelector('.tag-input').value, updated: Date.now() };
     if (mode === 'connections') draft.g = [...app.querySelectorAll('.group-fields')].map(row => [row.querySelector('.group-name').value, row.querySelector('.group-words').value]);
     else draft.w = [...app.querySelectorAll('.answer-input')].map(input => input.value);
+    return draft;
+  }
+
+  function saveDraft(mode) {
+    if (!app.querySelector('.mock-setup')) return null;
+    const draft = draftFromForm(mode);
     writeStored(draftKey(mode), draft);
+    history.replaceState({}, '', `#edit=${pack(draft)}`);
+    return draft;
+  }
+
+  async function copyEditorLink(mode) {
+    const draft = saveDraft(mode), url = editLinkFor(draft), button = app.querySelector('.copy-editor');
+    try { await navigator.clipboard.writeText(url); } catch (_) {
+      const input = app.querySelector('.editor-link-output'); input.hidden = false; input.value = url; input.select(); document.execCommand('copy');
+    }
+    button.textContent = 'Editor link copied!';
+    setTimeout(() => { if (button) button.textContent = 'Copy private editor link'; }, 1800);
   }
 
   function rememberGame(data) {
@@ -52,7 +69,7 @@
     const fields = isConnections
       ? Array.from({ length: 4 }, (_, i) => `<div class="group-fields"><div class="group-order"><strong><span class="group-number">${i + 1}</span>. <span class="group-difficulty"></span></strong><span><button type="button" class="move-group move-up" aria-label="Move group ${i + 1} up">Move up</button><button type="button" class="move-group move-down" aria-label="Move group ${i + 1} down">Move down</button></span></div><label>Category name<input class="group-name" maxlength="50" placeholder="e.g. Things with keys"></label><label>Four words, separated by commas<input class="group-words" maxlength="120" placeholder="PIANO, LOCK, MAP, KEYBOARD"></label></div>`).join('')
       : Array.from({ length: count }, (_, i) => `<label class="answer-label">Answer ${i + 1}<input class="answer-input" maxlength="5" autocomplete="off" spellcheck="false" placeholder="APPLE"></label>`).join('');
-    app.innerHTML = header('CREATE A GAME', true, title) + `<main class="mock-setup"><div class="setup-heading"><span>Sender setup</span><h2>${esc(title)}</h2><p>${isConnections ? 'Name four categories and enter four connected words for each. Then arrange them from easiest (yellow) to hardest (purple).' : `Enter ${count} hidden five-letter answer${count > 1 ? 's' : ''}.`}</p></div><label class="setup-label">Tag for your friend <span>optional</span><input class="tag-input" maxlength="40" placeholder="e.g. Jamie"></label><div class="answer-fields">${fields}</div><p class="draft-status">${restored ? 'Saved draft restored.' : 'Your draft saves automatically on this device.'}</p><p class="setup-error" role="alert"></p><div class="setup-actions"><button class="clear-draft">Clear draft</button><button class="preview-button">Preview game</button><button class="copy-button primary">Copy player link</button></div><label class="link-output" hidden>Tagged player link<input readonly></label><p class="privacy-note">The answers are concealed, not encrypted. Anyone who deliberately decodes the link can read them.</p></main>${footer()}`;
+    app.innerHTML = header('CREATE A GAME', true, title) + `<main class="mock-setup"><div class="setup-heading"><span>Sender setup</span><h2>${esc(title)}</h2><p>${isConnections ? 'Name four categories and enter four connected words for each. Then arrange them from easiest (yellow) to hardest (purple).' : `Enter ${count} hidden five-letter answer${count > 1 ? 's' : ''}.`}</p></div><label class="setup-label">Tag for your friend <span>optional</span><input class="tag-input" maxlength="40" placeholder="e.g. Jamie"></label><div class="answer-fields">${fields}</div><p class="draft-status">${restored ? 'Saved draft restored.' : 'Your draft saves automatically on this device.'}</p><div class="editor-save"><div><strong>Keep editing later</strong><span>Copy this private link to reopen the editable draft on any device.</span></div><button class="copy-editor">Copy private editor link</button><input class="editor-link-output" readonly hidden aria-label="Private editor link"></div><p class="setup-error" role="alert"></p><div class="setup-actions"><button class="clear-draft">Clear draft</button><button class="preview-button">Preview game</button><button class="copy-button primary">Copy player link</button></div><label class="link-output" hidden>Tagged player link<input readonly></label><p class="privacy-note">Keep the editor link private: it contains the editable answers. The player link conceals the answers but is not encrypted.</p></main>${footer()}`;
     app.querySelector('.home').onclick = picker;
     app.querySelector('.help').hidden = true;
     app.querySelector('.tag-input').value = draft.t || '';
@@ -72,6 +89,7 @@
       updateGroupOrder();
     }
     app.querySelector('.mock-setup').addEventListener('input', () => saveDraft(mode));
+    app.querySelector('.copy-editor').onclick = () => copyEditorLink(mode);
     app.querySelector('.clear-draft').onclick = () => { removeStored(draftKey(mode)); setup(mode, blankDraft(mode), false); history.replaceState({}, '', `#create=${mode}`); };
     app.querySelector('.preview-button').onclick = () => create(mode, false);
     app.querySelector('.copy-button').onclick = () => create(mode, true);
@@ -186,9 +204,15 @@
   }
 
   function valid(data) { if (!data || data.v !== 1 || typeof data.m !== 'string') return false; if (data.m === 'connections') return Array.isArray(data.g) && data.g.length === 4 && data.g.every(g => Array.isArray(g) && typeof g[0] === 'string' && Array.isArray(g[1]) && g[1].length === 4); return Boolean(modes[data.m]) && Array.isArray(data.w) && data.w.length === modes[data.m][1] && data.w.every(w => /^[A-Z]{5}$/.test(w)); }
+  function validDraft(data) {
+    if (!data || data.v !== 1 || typeof data.t !== 'string' || data.t.length > 40) return false;
+    if (data.m === 'connections') return Array.isArray(data.g) && data.g.length === 4 && data.g.every(group => Array.isArray(group) && group.length === 2 && typeof group[0] === 'string' && group[0].length <= 50 && ((typeof group[1] === 'string' && group[1].length <= 120) || (Array.isArray(group[1]) && group[1].length === 4)));
+    return Boolean(modes[data.m]) && Array.isArray(data.w) && data.w.length === modes[data.m][1] && data.w.every(word => typeof word === 'string' && word.length <= 5);
+  }
   function route() {
     const hash = location.hash.slice(1);
     if (hash.startsWith('play=')) { try { const data = unpack(hash.slice(5)); if (!valid(data)) throw new Error(); data.m === 'connections' ? startConnections(false, data) : startWords(data.m, false, data); return; } catch (_) { picker(false); return; } }
+    if (hash.startsWith('edit=')) { try { const data = unpack(hash.slice(5)); if (!validDraft(data)) throw new Error(); setup(data.m, data, false); return; } catch (_) { picker(false); return; } }
     if (hash.startsWith('create=')) { const mode = hash.slice(7); if (mode === 'connections' || modes[mode]) { setup(mode, null, false); return; } }
     if (hash === 'connections') startConnections(false); else if (modes[hash]) startWords(hash, false); else picker(false);
   }
