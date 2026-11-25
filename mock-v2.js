@@ -12,6 +12,30 @@
   const pack = data => { const bytes = new TextEncoder().encode(JSON.stringify(data)); let binary = ''; bytes.forEach(b => { binary += String.fromCharCode(b); }); return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); };
   const unpack = text => { const s = text.replace(/-/g, '+').replace(/_/g, '/'); const binary = atob(s + '='.repeat((4 - s.length % 4) % 4)); return JSON.parse(new TextDecoder().decode(Uint8Array.from(binary, c => c.charCodeAt(0)))); };
   const linkFor = data => `${location.origin}${location.pathname}#play=${pack(data)}`;
+  const draftKey = mode => `mockle:draft:${mode}`;
+  const readStored = (key, fallback = null) => { try { const value = localStorage.getItem(key); return value ? JSON.parse(value) : fallback; } catch (_) { return fallback; } };
+  const writeStored = (key, value) => { try { localStorage.setItem(key, JSON.stringify(value)); } catch (_) {} };
+  const removeStored = key => { try { localStorage.removeItem(key); } catch (_) {} };
+  const blankDraft = mode => mode === 'connections' ? { t: '', g: Array.from({ length: 4 }, () => ['', '']) } : { t: '', w: Array(modes[mode][1]).fill('') };
+  const hasDraft = draft => Boolean(draft && (draft.t || draft.w?.some(Boolean) || draft.g?.some(group => group?.[0] || group?.[1]?.length)));
+
+  function saveDraft(mode) {
+    if (!app.querySelector('.mock-setup')) return;
+    const draft = { t: app.querySelector('.tag-input').value, updated: Date.now() };
+    if (mode === 'connections') draft.g = [...app.querySelectorAll('.group-fields')].map(row => [row.querySelector('.group-name').value, row.querySelector('.group-words').value]);
+    else draft.w = [...app.querySelectorAll('.answer-input')].map(input => input.value);
+    writeStored(draftKey(mode), draft);
+  }
+
+  function rememberGame(data) {
+    const token = pack(data), saved = readStored('mockle:owned-games', []), owned = (Array.isArray(saved) ? saved : []).filter(item => item !== token);
+    writeStored('mockle:owned-games', [token, ...owned].slice(0, 12));
+  }
+
+  function ownsGame(data) {
+    const owned = readStored('mockle:owned-games', []);
+    return Array.isArray(owned) && owned.includes(pack(data));
+  }
 
   function picker(changeUrl = true) {
     wordGame = connectionGame = null;
@@ -22,22 +46,36 @@
     scrollTo(0, 0);
   }
 
-  function setup(mode) {
+  function setup(mode, initial = null, changeUrl = true) {
     const isConnections = mode === 'connections', title = isConnections ? 'Connections' : modes[mode][0], count = isConnections ? 4 : modes[mode][1];
+    const stored = initial || readStored(draftKey(mode)), restored = !initial && hasDraft(stored), draft = stored || blankDraft(mode);
     const fields = isConnections
       ? Array.from({ length: 4 }, (_, i) => `<div class="group-fields"><div class="group-order"><strong><span class="group-number">${i + 1}</span>. <span class="group-difficulty"></span></strong><span><button type="button" class="move-group move-up" aria-label="Move group ${i + 1} up">Move up</button><button type="button" class="move-group move-down" aria-label="Move group ${i + 1} down">Move down</button></span></div><label>Category name<input class="group-name" maxlength="50" placeholder="e.g. Things with keys"></label><label>Four words, separated by commas<input class="group-words" maxlength="120" placeholder="PIANO, LOCK, MAP, KEYBOARD"></label></div>`).join('')
       : Array.from({ length: count }, (_, i) => `<label class="answer-label">Answer ${i + 1}<input class="answer-input" maxlength="5" autocomplete="off" spellcheck="false" placeholder="APPLE"></label>`).join('');
-    app.innerHTML = header('CREATE A GAME', true, title) + `<main class="mock-setup"><div class="setup-heading"><span>Sender setup</span><h2>${esc(title)}</h2><p>${isConnections ? 'Name four categories and enter four connected words for each. Then arrange them from easiest (yellow) to hardest (purple).' : `Enter ${count} hidden five-letter answer${count > 1 ? 's' : ''}.`}</p></div><label class="setup-label">Tag for your friend <span>optional</span><input class="tag-input" maxlength="40" placeholder="e.g. Jamie"></label><div class="answer-fields">${fields}</div><p class="setup-error" role="alert"></p><div class="setup-actions"><button class="preview-button">Preview game</button><button class="copy-button primary">Copy player link</button></div><label class="link-output" hidden>Tagged player link<input readonly></label><p class="privacy-note">The answers are concealed, not encrypted. Anyone who deliberately decodes the link can read them.</p></main>${footer()}`;
+    app.innerHTML = header('CREATE A GAME', true, title) + `<main class="mock-setup"><div class="setup-heading"><span>Sender setup</span><h2>${esc(title)}</h2><p>${isConnections ? 'Name four categories and enter four connected words for each. Then arrange them from easiest (yellow) to hardest (purple).' : `Enter ${count} hidden five-letter answer${count > 1 ? 's' : ''}.`}</p></div><label class="setup-label">Tag for your friend <span>optional</span><input class="tag-input" maxlength="40" placeholder="e.g. Jamie"></label><div class="answer-fields">${fields}</div><p class="draft-status">${restored ? 'Saved draft restored.' : 'Your draft saves automatically on this device.'}</p><p class="setup-error" role="alert"></p><div class="setup-actions"><button class="clear-draft">Clear draft</button><button class="preview-button">Preview game</button><button class="copy-button primary">Copy player link</button></div><label class="link-output" hidden>Tagged player link<input readonly></label><p class="privacy-note">The answers are concealed, not encrypted. Anyone who deliberately decodes the link can read them.</p></main>${footer()}`;
     app.querySelector('.home').onclick = picker;
     app.querySelector('.help').hidden = true;
+    app.querySelector('.tag-input').value = draft.t || '';
+    if (isConnections) {
+      [...app.querySelectorAll('.group-fields')].forEach((row, i) => {
+        const group = draft.g?.[i] || ['', ''];
+        row.querySelector('.group-name').value = group[0] || '';
+        row.querySelector('.group-words').value = Array.isArray(group[1]) ? group[1].join(', ') : (group[1] || '');
+      });
+    } else {
+      [...app.querySelectorAll('.answer-input')].forEach((input, i) => { input.value = draft.w?.[i] || ''; });
+    }
     app.querySelectorAll('.answer-input').forEach(input => { input.oninput = () => { input.value = input.value.toUpperCase().replace(/[^A-Z]/g, ''); }; });
     if (isConnections) {
       app.querySelectorAll('.move-up').forEach(button => { button.onclick = () => moveGroup(button.closest('.group-fields'), -1); });
       app.querySelectorAll('.move-down').forEach(button => { button.onclick = () => moveGroup(button.closest('.group-fields'), 1); });
       updateGroupOrder();
     }
+    app.querySelector('.mock-setup').addEventListener('input', () => saveDraft(mode));
+    app.querySelector('.clear-draft').onclick = () => { removeStored(draftKey(mode)); setup(mode, blankDraft(mode), false); history.replaceState({}, '', `#create=${mode}`); };
     app.querySelector('.preview-button').onclick = () => create(mode, false);
     app.querySelector('.copy-button').onclick = () => create(mode, true);
+    if (changeUrl) history.pushState({}, '', `#create=${mode}`);
     scrollTo(0, 0);
   }
 
@@ -47,6 +85,7 @@
     if (direction < 0) row.parentElement.insertBefore(row, sibling);
     else row.parentElement.insertBefore(sibling, row);
     updateGroupOrder();
+    saveDraft('connections');
     row.querySelector(direction < 0 ? '.move-up' : '.move-down').focus();
   }
 
@@ -80,6 +119,7 @@
     const error = app.querySelector('.setup-error'); error.textContent = '';
     try {
       const data = payloadFrom(mode), url = linkFor(data), output = app.querySelector('.link-output');
+      saveDraft(mode); rememberGame(data);
       output.hidden = false; output.querySelector('input').value = url;
       if (!copy) { data.m === 'connections' ? startConnections(true, data) : startWords(data.m, true, data); return; }
       try { await navigator.clipboard.writeText(url); } catch (_) { output.querySelector('input').select(); document.execCommand('copy'); }
@@ -92,13 +132,19 @@
     app.querySelector('.help').onclick = () => alert(connectionGame ? 'Select four words sharing a connection. Find all groups before four mistakes.' : `Guess the hidden five-letter word${wordGame.count > 1 ? 's' : ''}. Green is correct, yellow is elsewhere, and gray is absent.`);
   }
 
+  function wireEditor(data) {
+    const button = app.querySelector('.edit-game');
+    if (button) button.onclick = () => setup(data.m, data);
+  }
+
   function startWords(mode, changeUrl = true, data = null) {
     const [name, count, limit] = modes[mode], daily = Array.from({ length: count }, (_, i) => defaults[(Math.floor(Date.now() / 86400000) * 17 + i * 13) % defaults.length]);
     const answers = data?.w?.length === count ? data.w : daily, tag = data?.t || '';
     wordGame = { mode, name, count, limit, answers, guesses: [], current: '', solved: Array(count).fill(false), keys: {}, over: false, tag }; connectionGame = null;
     const subtitle = tag ? `A puzzle for ${tag}` : 'daily puzzle'; document.title = `${name} — ${subtitle}`;
-    app.innerHTML = header(name.toUpperCase(), true, subtitle) + `<main class="mock-game"><div class="mock-status"><span>${tag ? `${esc(tag)}’s ${name}` : `Daily ${name}`}</span><strong class="count"></strong></div><div class="mock-boards" data-n="${count}"></div><div class="mock-toast"></div><div class="mock-keyboard"></div></main>${footer()}`;
-    wireHeader(); buildKeyboard(); renderWords(); if (changeUrl) history.pushState({}, '', data ? `#play=${pack(data)}` : `#${mode}`); scrollTo(0, 0);
+    const editor = data && ownsGame(data) ? '<div class="creator-tools"><span>Creator preview</span><button class="edit-game">Edit game</button></div>' : '';
+    app.innerHTML = header(name.toUpperCase(), true, subtitle) + editor + `<main class="mock-game"><div class="mock-status"><span>${tag ? `${esc(tag)}’s ${name}` : `Daily ${name}`}</span><strong class="count"></strong></div><div class="mock-boards" data-n="${count}"></div><div class="mock-toast"></div><div class="mock-keyboard"></div></main>${footer()}`;
+    wireHeader(); wireEditor(data); buildKeyboard(); renderWords(); if (changeUrl) history.pushState({}, '', data ? `#play=${pack(data)}` : `#${mode}`); scrollTo(0, 0);
   }
 
   function buildKeyboard() {
@@ -122,8 +168,9 @@
   function startConnections(changeUrl = true, data = null) {
     const groups = data?.g || defaultGroups, tag = data?.t || ''; connectionGame = { groups, remaining: shuffle(groups.flatMap(g => g[1])), selected: [], solved: [], mistakes: 4, over: false, tag }; wordGame = null;
     const subtitle = tag ? `A puzzle for ${tag}` : 'daily puzzle'; document.title = `Connections — ${subtitle}`;
-    app.innerHTML = header('CONNECTIONS', true, subtitle) + `<main class="mock-connections"><h2>Create four groups of four!</h2>${tag ? `<p class="tag-line">Made for ${esc(tag)}</p>` : ''}<p>Mistakes remaining: <span class="mistakes"></span></p><div class="solved"></div><div class="mock-cgrid"></div><div class="mock-msg"></div><div class="mock-actions"><button class="shuffle">Shuffle</button><button class="deselect">Deselect all</button><button class="send primary">Submit</button></div></main>${footer()}`;
-    wireHeader(); app.querySelector('.shuffle').onclick = () => { connectionGame.remaining = shuffle(connectionGame.remaining); renderConnections(); }; app.querySelector('.deselect').onclick = () => { connectionGame.selected = []; renderConnections(); }; app.querySelector('.send').onclick = submitConnection; renderConnections(); if (changeUrl) history.pushState({}, '', data ? `#play=${pack(data)}` : '#connections'); scrollTo(0, 0);
+    const editor = data && ownsGame(data) ? '<div class="creator-tools"><span>Creator preview</span><button class="edit-game">Edit game</button></div>' : '';
+    app.innerHTML = header('CONNECTIONS', true, subtitle) + editor + `<main class="mock-connections"><h2>Create four groups of four!</h2>${tag ? `<p class="tag-line">Made for ${esc(tag)}</p>` : ''}<p>Mistakes remaining: <span class="mistakes"></span></p><div class="solved"></div><div class="mock-cgrid"></div><div class="mock-msg"></div><div class="mock-actions"><button class="shuffle">Shuffle</button><button class="deselect">Deselect all</button><button class="send primary">Submit</button></div></main>${footer()}`;
+    wireHeader(); wireEditor(data); app.querySelector('.shuffle').onclick = () => { connectionGame.remaining = shuffle(connectionGame.remaining); renderConnections(); }; app.querySelector('.deselect').onclick = () => { connectionGame.selected = []; renderConnections(); }; app.querySelector('.send').onclick = submitConnection; renderConnections(); if (changeUrl) history.pushState({}, '', data ? `#play=${pack(data)}` : '#connections'); scrollTo(0, 0);
   }
   function renderConnections() {
     const solved = app.querySelector('.solved'), grid = app.querySelector('.mock-cgrid'); solved.innerHTML = grid.innerHTML = '';
@@ -142,6 +189,7 @@
   function route() {
     const hash = location.hash.slice(1);
     if (hash.startsWith('play=')) { try { const data = unpack(hash.slice(5)); if (!valid(data)) throw new Error(); data.m === 'connections' ? startConnections(false, data) : startWords(data.m, false, data); return; } catch (_) { picker(false); return; } }
+    if (hash.startsWith('create=')) { const mode = hash.slice(7); if (mode === 'connections' || modes[mode]) { setup(mode, null, false); return; } }
     if (hash === 'connections') startConnections(false); else if (modes[hash]) startWords(hash, false); else picker(false);
   }
   document.addEventListener('keydown', event => { if (!wordGame) return; if (event.key === 'Enter') type('↵'); else if (event.key === 'Backspace' || event.key === 'Delete') type('⌫'); else if (/^[a-z]$/i.test(event.key)) type(event.key.toUpperCase()); });
