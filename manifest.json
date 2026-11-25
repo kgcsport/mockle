@@ -57,7 +57,7 @@
       "purpose": "any maskable"
     }
   ],
-  "start_url": "https://www.octordle.com",
+  "start_url": "/octordle/",
   "background_color": "#181a1b",
   "display": "standalone",
   "orientation": "portrait",
