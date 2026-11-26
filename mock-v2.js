@@ -18,11 +18,11 @@
   const readStored = (key, fallback = null) => { try { const value = localStorage.getItem(key); return value ? JSON.parse(value) : fallback; } catch (_) { return fallback; } };
   const writeStored = (key, value) => { try { localStorage.setItem(key, JSON.stringify(value)); } catch (_) {} };
   const removeStored = key => { try { localStorage.removeItem(key); } catch (_) {} };
-  const blankDraft = mode => mode === 'connections' ? { t: '', g: Array.from({ length: 4 }, () => ['', '']) } : { t: '', w: Array(modes[mode][1]).fill('') };
-  const hasDraft = draft => Boolean(draft && (draft.t || draft.w?.some(Boolean) || draft.g?.some(group => group?.[0] || group?.[1]?.length)));
+  const blankDraft = mode => mode === 'connections' ? { t: '', p: '', g: Array.from({ length: 4 }, () => ['', '']) } : { t: '', p: '', w: Array(modes[mode][1]).fill('') };
+  const hasDraft = draft => Boolean(draft && (draft.t || draft.p || draft.w?.some(Boolean) || draft.g?.some(group => group?.[0] || group?.[1]?.length)));
 
   function draftFromForm(mode) {
-    const draft = { v: 1, m: mode, t: app.querySelector('.tag-input').value, updated: Date.now() };
+    const draft = { v: 1, m: mode, t: app.querySelector('.tag-input').value, p: app.querySelector('.message-input').value, updated: Date.now() };
     if (mode === 'connections') draft.g = [...app.querySelectorAll('.group-fields')].map(row => [row.querySelector('.group-name').value, row.querySelector('.group-words').value]);
     else draft.w = [...app.querySelectorAll('.answer-input')].map(input => input.value);
     return draft;
@@ -70,10 +70,11 @@
     const fields = isConnections
       ? Array.from({ length: 4 }, (_, i) => `<div class="group-fields"><div class="group-order"><strong><span class="group-number">${i + 1}</span>. <span class="group-difficulty"></span></strong><span><button type="button" class="move-group move-up" aria-label="Move group ${i + 1} up">Move up</button><button type="button" class="move-group move-down" aria-label="Move group ${i + 1} down">Move down</button></span></div><label>Category name<input class="group-name" maxlength="50" placeholder="e.g. Things with keys"></label><label>Four words, separated by commas<input class="group-words" maxlength="120" placeholder="PIANO, LOCK, MAP, KEYBOARD"></label></div>`).join('')
       : Array.from({ length: count }, (_, i) => `<label class="answer-label">Answer ${i + 1}<input class="answer-input" maxlength="5" autocomplete="off" spellcheck="false" placeholder="APPLE"></label>`).join('');
-    app.innerHTML = header('CREATE A GAME', true, title) + `<main class="mock-setup"><div class="setup-heading"><span>Sender setup</span><h2>${esc(title)}</h2><p>${isConnections ? 'Name four categories and enter four connected words for each. Then arrange them from easiest (yellow) to hardest (purple).' : `Enter ${count} hidden five-letter answer${count > 1 ? 's' : ''}.`}</p></div><label class="setup-label">Tag for your friend <span>optional</span><input class="tag-input" maxlength="40" placeholder="e.g. Jamie"></label><div class="answer-fields">${fields}</div><p class="draft-status">${restored ? 'Saved draft restored.' : 'Your draft saves automatically on this device.'}</p><div class="editor-save"><div><strong>Keep editing later</strong><span>Copy this private link to reopen the editable draft on any device.</span></div><button class="copy-editor">Copy private editor link</button><input class="editor-link-output" readonly hidden aria-label="Private editor link"></div><p class="setup-error" role="alert"></p><div class="setup-actions"><button class="clear-draft">Clear draft</button><button class="preview-button">Preview game</button><button class="copy-button primary">Copy player link</button></div><label class="link-output" hidden>Tagged player link<input readonly></label><p class="privacy-note">Keep the editor link private: it contains the editable answers. The player link conceals the answers but is not encrypted.</p></main>${footer()}`;
+    app.innerHTML = header('CREATE A GAME', true, title) + `<main class="mock-setup"><div class="setup-heading"><span>Sender setup</span><h2>${esc(title)}</h2><p>${isConnections ? 'Name four categories and enter four connected words for each. Then arrange them from easiest (yellow) to hardest (purple).' : `Enter ${count} hidden five-letter answer${count > 1 ? 's' : ''}.`}</p></div><label class="setup-label">Tag for your friend <span>optional</span><input class="tag-input" maxlength="40" placeholder="e.g. Jamie"></label><label class="setup-label">Message after they solve <span>optional</span><input class="message-input" maxlength="140" placeholder="e.g. Happy birthday! You got it!"></label><div class="answer-fields">${fields}</div><p class="draft-status">${restored ? 'Saved draft restored.' : 'Your draft saves automatically on this device.'}</p><div class="editor-save"><div><strong>Keep editing later</strong><span>Copy this private link to reopen the editable draft on any device.</span></div><button class="copy-editor">Copy private editor link</button><input class="editor-link-output" readonly hidden aria-label="Private editor link"></div><p class="setup-error" role="alert"></p><div class="setup-actions"><button class="clear-draft">Clear draft</button><button class="preview-button">Preview game</button><button class="copy-button primary">Copy player link</button></div><label class="link-output" hidden>Tagged player link<input readonly></label><p class="privacy-note">Keep the editor link private: it contains the editable answers. The player link conceals the answers but is not encrypted.</p></main>${footer()}`;
     app.querySelector('.home').onclick = picker;
     app.querySelector('.help').hidden = true;
     app.querySelector('.tag-input').value = draft.t || '';
+    app.querySelector('.message-input').value = draft.p || '';
     if (isConnections) {
       [...app.querySelectorAll('.group-fields')].forEach((row, i) => {
         const group = draft.g?.[i] || ['', ''];
@@ -122,16 +123,17 @@
 
   function payloadFrom(mode) {
     const tag = app.querySelector('.tag-input').value.trim().replace(/^for\s+/i, '').slice(0, 40);
+    const message = app.querySelector('.message-input').value.trim().slice(0, 140);
     if (mode === 'connections') {
       const groups = [...app.querySelectorAll('.group-fields')].map(row => [row.querySelector('.group-name').value.trim(), row.querySelector('.group-words').value.split(',').map(w => w.trim().toUpperCase()).filter(Boolean)]);
       if (groups.some(([name, words]) => !name || words.length !== 4)) throw new Error('Each group needs a name and exactly four comma-separated words.');
       if (new Set(groups.flatMap(g => g[1])).size !== 16) throw new Error('All 16 Connections words must be different.');
-      return { v: 1, m: mode, t: tag, g: groups };
+      return { v: 1, m: mode, t: tag, p: message, g: groups };
     }
     const words = [...app.querySelectorAll('.answer-input')].map(input => input.value.toUpperCase());
     if (words.some(word => !/^[A-Z]{5}$/.test(word))) throw new Error('Every answer must contain exactly five letters.');
     if (new Set(words).size !== words.length) throw new Error('Use a different answer for each board.');
-    return { v: 1, m: mode, t: tag, w: words };
+    return { v: 1, m: mode, t: tag, p: message, w: words };
   }
 
   async function create(mode, copy) {
@@ -156,10 +158,24 @@
     if (button) button.onclick = () => setup(data.m, data);
   }
 
+  function showSolvedMessage(message) {
+    if (!message) return;
+    const modal = document.createElement('div');
+    modal.className = 'win-modal';
+    modal.innerHTML = `<div class="win-card" role="dialog" aria-modal="true" aria-labelledby="win-title"><span>Puzzle solved</span><h2 id="win-title">A message for you</h2><p>${esc(message)}</p><button type="button">Close</button></div>`;
+    const onKey = event => { if (event.key === 'Escape') close(); };
+    const close = () => { document.removeEventListener('keydown', onKey); modal.remove(); };
+    modal.querySelector('button').onclick = close;
+    modal.onclick = event => { if (event.target === modal) close(); };
+    app.append(modal);
+    document.addEventListener('keydown', onKey);
+    modal.querySelector('button').focus();
+  }
+
   function startWords(mode, changeUrl = true, data = null) {
     const [name, count, limit] = modes[mode], daily = Array.from({ length: count }, (_, i) => defaults[(Math.floor(Date.now() / 86400000) * 17 + i * 13) % defaults.length]);
-    const answers = data?.w?.length === count ? data.w : daily, tag = data?.t || '';
-    wordGame = { mode, name, count, limit, answers, guesses: [], current: '', solved: Array(count).fill(false), keys: {}, over: false, tag }; connectionGame = null;
+    const answers = data?.w?.length === count ? data.w : daily, tag = data?.t || '', message = data?.p || '';
+    wordGame = { mode, name, count, limit, answers, guesses: [], current: '', solved: Array(count).fill(false), keys: {}, over: false, tag, message }; connectionGame = null;
     const subtitle = tag ? `A puzzle for ${tag}` : 'daily puzzle'; document.title = `${name} — ${subtitle}`;
     const editor = data && ownsGame(data) ? '<div class="creator-tools"><span>Creator preview</span><button class="edit-game">Edit game</button></div>' : '';
     app.innerHTML = header(name.toUpperCase(), true, subtitle) + editor + `<main class="mock-game"><div class="mock-status"><span>${tag ? `${esc(tag)}’s ${name}` : `Daily ${name}`}</span><strong class="count"></strong></div><div class="mock-boards" data-n="${count}"></div><div class="mock-toast"></div><div class="mock-keyboard"></div></main>${footer()}`;
@@ -181,11 +197,11 @@
   function submitWord() {
     if (wordGame.current.length !== 5) { toast('Not enough letters'); return; } const guess = wordGame.current, ranks = { absent: 1, present: 2, correct: 3 }; wordGame.guesses.push(guess);
     wordGame.answers.forEach((answer, i) => { if (!wordGame.solved[i]) score(guess, answer).forEach((status, j) => { const old = wordGame.keys[guess[j]]; if (!old || ranks[status] > ranks[old]) wordGame.keys[guess[j]] = status; }); if (guess === answer) wordGame.solved[i] = true; }); wordGame.current = '';
-    if (wordGame.solved.every(Boolean)) { wordGame.over = true; toast('Impressive!', 4000); } else if (wordGame.guesses.length >= wordGame.limit) { wordGame.over = true; toast(`Answers: ${wordGame.answers.join(' · ')}`, 7000); } renderWords();
+    if (wordGame.solved.every(Boolean)) { wordGame.over = true; toast('Impressive!', 4000); setTimeout(() => showSolvedMessage(wordGame.message), 500); } else if (wordGame.guesses.length >= wordGame.limit) { wordGame.over = true; toast(`Answers: ${wordGame.answers.join(' · ')}`, 7000); } renderWords();
   }
 
   function startConnections(changeUrl = true, data = null) {
-    const groups = data?.g || defaultGroups, tag = data?.t || ''; connectionGame = { groups, remaining: shuffle(groups.flatMap(g => g[1])), selected: [], solved: [], mistakes: 4, over: false, tag }; wordGame = null;
+    const groups = data?.g || defaultGroups, tag = data?.t || '', message = data?.p || ''; connectionGame = { groups, remaining: shuffle(groups.flatMap(g => g[1])), selected: [], solved: [], mistakes: 4, over: false, tag, message }; wordGame = null;
     const subtitle = tag ? `A puzzle for ${tag}` : 'daily puzzle'; document.title = `Connections — ${subtitle}`;
     const editor = data && ownsGame(data) ? '<div class="creator-tools"><span>Creator preview</span><button class="edit-game">Edit game</button></div>' : '';
     app.innerHTML = header('CONNECTIONS', true, subtitle) + editor + `<main class="mock-connections"><h2>Create four groups of four!</h2>${tag ? `<p class="tag-line">Made for ${esc(tag)}</p>` : ''}<p>Mistakes remaining: <span class="mistakes"></span></p><div class="solved"></div><div class="mock-cgrid"></div><div class="mock-msg"></div><div class="mock-actions"><button class="shuffle">Shuffle</button><button class="deselect">Deselect all</button><button class="send primary">Submit</button></div></main>${footer()}`;
@@ -200,13 +216,13 @@
   function cmessage(text, duration = 1400) { app.querySelector('.mock-msg').textContent = text; setTimeout(() => { const el = app.querySelector('.mock-msg'); if (el?.textContent === text) el.textContent = ''; }, duration); }
   function submitConnection() {
     const match = connectionGame.groups.find(group => group[1].every(word => connectionGame.selected.includes(word)));
-    if (match) { connectionGame.solved.push(match); connectionGame.remaining = connectionGame.remaining.filter(word => !match[1].includes(word)); connectionGame.selected = []; cmessage('Correct!'); if (connectionGame.solved.length === 4) { connectionGame.over = true; cmessage('Perfect connections!', 4000); } }
+    if (match) { connectionGame.solved.push(match); connectionGame.remaining = connectionGame.remaining.filter(word => !match[1].includes(word)); connectionGame.selected = []; cmessage('Correct!'); if (connectionGame.solved.length === 4) { connectionGame.over = true; cmessage('Perfect connections!', 4000); setTimeout(() => showSolvedMessage(connectionGame.message), 500); } }
     else { const near = connectionGame.groups.some(group => group[1].filter(word => connectionGame.selected.includes(word)).length === 3); connectionGame.mistakes--; connectionGame.selected = []; cmessage(near ? 'One away…' : 'Not quite'); if (!connectionGame.mistakes) { connectionGame.over = true; connectionGame.groups.filter(group => !connectionGame.solved.includes(group)).forEach(group => connectionGame.solved.push(group)); connectionGame.remaining = []; cmessage('Next time! Here are the groups.', 5000); } } renderConnections();
   }
 
-  function valid(data) { if (!data || data.v !== 1 || typeof data.m !== 'string') return false; if (data.m === 'connections') return Array.isArray(data.g) && data.g.length === 4 && data.g.every(g => Array.isArray(g) && typeof g[0] === 'string' && Array.isArray(g[1]) && g[1].length === 4); return Boolean(modes[data.m]) && Array.isArray(data.w) && data.w.length === modes[data.m][1] && data.w.every(w => /^[A-Z]{5}$/.test(w)); }
+  function valid(data) { if (!data || data.v !== 1 || typeof data.m !== 'string' || (data.p !== undefined && (typeof data.p !== 'string' || data.p.length > 140))) return false; if (data.m === 'connections') return Array.isArray(data.g) && data.g.length === 4 && data.g.every(g => Array.isArray(g) && typeof g[0] === 'string' && Array.isArray(g[1]) && g[1].length === 4); return Boolean(modes[data.m]) && Array.isArray(data.w) && data.w.length === modes[data.m][1] && data.w.every(w => /^[A-Z]{5}$/.test(w)); }
   function validDraft(data) {
-    if (!data || data.v !== 1 || typeof data.t !== 'string' || data.t.length > 40) return false;
+    if (!data || data.v !== 1 || typeof data.t !== 'string' || data.t.length > 40 || (data.p !== undefined && (typeof data.p !== 'string' || data.p.length > 140))) return false;
     if (data.m === 'connections') return Array.isArray(data.g) && data.g.length === 4 && data.g.every(group => Array.isArray(group) && group.length === 2 && typeof group[0] === 'string' && group[0].length <= 50 && ((typeof group[1] === 'string' && group[1].length <= 120) || (Array.isArray(group[1]) && group[1].length === 4)));
     return Boolean(modes[data.m]) && Array.isArray(data.w) && data.w.length === modes[data.m][1] && data.w.every(word => typeof word === 'string' && word.length <= 5);
   }
